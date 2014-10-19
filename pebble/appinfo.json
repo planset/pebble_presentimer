@@ -1,0 +1,44 @@
+{
+  "uuid": "FC118F0F-D898-4A9F-8662-93A2297ADC35",
+  "shortName": "presentimer",
+  "longName": "presentimer",
+  "companyName": "dkpyn.com",
+  "versionCode": 1,
+  "versionLabel": "1.0",
+  "capabilities": ["configurable"],
+  "watchapp": {
+    "watchface": false
+  },
+  "appKeys": {
+    "control": 0
+  },
+  "resources": {
+    "media": [
+        {
+          "type": "png",
+          "name": "IMAGE_ACTION_ICON_BACK",
+          "file": "images/back.png"
+        },
+        {
+          "type": "png",
+          "name": "IMAGE_ACTION_ICON_NEXT",
+          "file": "images/next.png"
+        },
+        {
+          "type": "png",
+          "name": "IMAGE_ACTION_ICON_DOWN",
+          "file": "images/down.png"
+        },
+        {
+          "type": "png",
+          "name": "IMAGE_ACTION_ICON_UP",
+          "file": "images/up.png"
+        },
+        {
+          "type": "png",
+          "name": "IMAGE_ACTION_ICON_BACK_TIMER",
+          "file": "images/back_timer.png"
+        }
+    ]
+  }
+}
