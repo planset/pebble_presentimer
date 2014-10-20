@@ -38,6 +38,21 @@
           "type": "png",
           "name": "IMAGE_ACTION_ICON_BACK_TIMER",
           "file": "images/back_timer.png"
+        },
+        {
+          "type": "png",
+          "name": "IMAGE_ACTION_ICON_PAUSE",
+          "file": "images/pause.png"
+        },
+        {
+          "type": "png",
+          "name": "IMAGE_ACTION_ICON_CANCEL",
+          "file": "images/cancel.png"
+        },
+        {
+          "type": "png",
+          "name": "IMAGE_ACTION_ICON_PLAY",
+          "file": "images/play.png"
         }
     ]
   }

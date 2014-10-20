@@ -1,5 +1,7 @@
 #include <pebble.h>
 
+#define debug(...) APP_LOG(APP_LOG_LEVEL_DEBUG, __VA_ARGS__);
+
 const int LONG_CLICK_DELAY_MS = 500; // A value of 0 means to user the system default 500ms.
 
 static Window *window;
@@ -11,6 +13,9 @@ static GBitmap *action_icon_next;
 static GBitmap *action_icon_down;
 static GBitmap *action_icon_up;
 static GBitmap *action_icon_back_timer;
+static GBitmap *action_icon_pause;
+static GBitmap *action_icon_cancel;
+static GBitmap *action_icon_play;
 
 static GFont s_res_bitham_30_black;
 static GFont s_res_roboto_condensed_21;
@@ -21,6 +26,11 @@ static TextLayer *tl_timer_seconds;
 static int timer_minutes = 5;
 static int timer_seconds = 0;
 
+static bool is_runnning = false;
+static int start_time = -1;
+static int start_timer_minutes = 5;
+static int start_timer_seconds = 0;
+
 typedef enum {
     KEYNOTE_CONTROL_BACK = 0,
     KEYNOTE_CONTROL_NEXT = 1
@@ -30,11 +40,17 @@ typedef struct {
     GBitmap *icon_up;
     GBitmap *icon_select;
     GBitmap *icon_down;
+
     void (*up_single_click_handler)(ClickRecognizerRef , void *);
     void (*select_single_click_handler)(ClickRecognizerRef , void *);
     void (*down_single_click_handler)(ClickRecognizerRef , void *);
+
+    void (*up_long_click_up_handler)(ClickRecognizerRef , void *);
+    void (*up_long_click_down_handler)(ClickRecognizerRef , void *);
     void (*select_long_click_up_handler)(ClickRecognizerRef , void *);
     void (*select_long_click_down_handler)(ClickRecognizerRef , void *);
+    void (*down_long_click_up_handler)(ClickRecognizerRef , void *);
+    void (*down_long_click_down_handler)(ClickRecognizerRef , void *);
 } ActionBarApp;
 
 static void new_ActionBarApp(ActionBarApp *self,
@@ -44,8 +60,12 @@ static void new_ActionBarApp(ActionBarApp *self,
         void (*up_single_click_handler)(ClickRecognizerRef , void *),
         void (*select_single_click_handler)(ClickRecognizerRef , void *),
         void (*down_single_click_handler)(ClickRecognizerRef , void *),
+        void (*up_long_click_up_handler)(ClickRecognizerRef , void *),
+        void (*up_long_click_down_handler)(ClickRecognizerRef , void *),
         void (*select_long_click_up_handler)(ClickRecognizerRef , void *),
-        void (*select_long_click_down_handler)(ClickRecognizerRef , void *)
+        void (*select_long_click_down_handler)(ClickRecognizerRef , void *),
+        void (*down_long_click_up_handler)(ClickRecognizerRef , void *),
+        void (*down_long_click_down_handler)(ClickRecognizerRef , void *)
         ) {
 
     self->icon_up = icon_up;
@@ -55,8 +75,12 @@ static void new_ActionBarApp(ActionBarApp *self,
     self->up_single_click_handler = up_single_click_handler;
     self->select_single_click_handler = select_single_click_handler;
     self->down_single_click_handler = down_single_click_handler;
+    self->up_long_click_up_handler = up_long_click_up_handler;
+    self->up_long_click_down_handler = up_long_click_down_handler;
     self->select_long_click_up_handler = select_long_click_up_handler;
     self->select_long_click_down_handler = select_long_click_down_handler;
+    self->down_long_click_up_handler = down_long_click_up_handler;
+    self->down_long_click_down_handler = down_long_click_down_handler;
 
 }
 
@@ -86,8 +110,6 @@ static ActionBarApp apps[3];
 static int current_app_index = 0;
 static ActionBarApp *current_app;
 
-#define debug(...) APP_LOG(APP_LOG_LEVEL_DEBUG, __VA_ARGS__);
-
 /*
  * アクションバーの変更
  */
@@ -100,9 +122,12 @@ static void action_bar_app_change_app(int app_index){
 }
 
 
-static void update_timer() {
+static void update_timer(int sec) {
     static char timer_minutes_text[5] = "999:";
     static char timer_seconds_text[3] = "99";
+
+    timer_minutes = sec/60;
+    timer_seconds = sec % 60;
 
     snprintf(timer_minutes_text, 5, "%d:", timer_minutes);
     snprintf(timer_seconds_text, 3, "%d", timer_seconds);
@@ -161,6 +186,20 @@ static void down_single_click_handler(ClickRecognizerRef recognizer, void *conte
 }
 
 /*
+ * 上ボタン長押し
+ */
+static void up_long_click_down_handler(ClickRecognizerRef recognizer, void *context) {
+    if (current_app->up_long_click_down_handler != NULL) {
+        current_app->up_long_click_down_handler(recognizer, context);
+    }
+}
+static void up_long_click_up_handler(ClickRecognizerRef recognizer, void *context) {
+    if (current_app->up_long_click_up_handler != NULL) {
+        current_app->up_long_click_up_handler(recognizer, context);
+    }
+}
+
+/*
  * 真ん中ボタン長押し
  */
 static void select_long_click_down_handler(ClickRecognizerRef recognizer, void *context) {
@@ -171,6 +210,20 @@ static void select_long_click_down_handler(ClickRecognizerRef recognizer, void *
 static void select_long_click_up_handler(ClickRecognizerRef recognizer, void *context) {
     if (current_app->select_long_click_up_handler != NULL) {
         current_app->select_long_click_up_handler(recognizer, context);
+    }
+}
+
+/*
+ * 下ボタン長押し
+ */
+static void down_long_click_down_handler(ClickRecognizerRef recognizer, void *context) {
+    if (current_app->down_long_click_down_handler != NULL) {
+        current_app->down_long_click_down_handler(recognizer, context);
+    }
+}
+static void down_long_click_up_handler(ClickRecognizerRef recognizer, void *context) {
+    if (current_app->down_long_click_up_handler != NULL) {
+        current_app->down_long_click_up_handler(recognizer, context);
     }
 }
 
@@ -187,28 +240,61 @@ static void click_config_provider(void *context){
             select_long_click_up_handler);
 }
 
-static void save_time(){
-    persist_write_int(0, timer_minutes);
-    persist_write_int(1, timer_seconds);
-}
-static void read_time(){
-    timer_minutes = persist_read_int(0);
-    timer_seconds = persist_read_int(1);
+/*
+ * データの保存
+ */
+static void save_data(){
+    persist_write_bool(0, is_runnning);
+    persist_write_int(1, start_time);
+    persist_write_int(2, start_timer_seconds);
 }
 
-/* Count down timer setting application */
+/*
+ * データの読み込み
+ */
+static void read_data(){
+    is_runnning = persist_read_bool(0);
+    start_time = persist_read_int(1);
+    start_timer_seconds = persist_read_int(2);
+}
+
+
+/* ================================================================================
+ * 
+ * Count down timer setting application
+ * 
+ * ================================================================================ */
+
+static void update_timer_tick_handler(struct tm *tick_time, TimeUnits units_changed) {
+    
+    int diff = time(NULL) - start_time;
+    int sec = start_timer_seconds - diff;
+
+    debug("diffsec = %d", sec);
+
+    update_timer(sec);
+
+    if (sec <= 0) {
+        tick_timer_service_unsubscribe();
+        vibes_short_pulse();
+    }
+    
+
+}
 
 /*
  * カウントダウンを開始する
  */
 static void TIMER_SETTING_select_single_click_handler(ClickRecognizerRef recognizer, void *context) {
-
     // 現在時刻を取ってストレージに保存、1秒毎に画面更新するようにTimerを開始
-    
-    timer_minutes = 100;
-    timer_seconds = 59;
-    update_timer();
+    start_time = (int)time(NULL);
+    start_timer_seconds = timer_minutes * 60 + timer_seconds;
 
+    debug("start_time = %d", start_time);
+
+    tick_timer_service_subscribe(SECOND_UNIT, update_timer_tick_handler);
+    
+    update_timer(start_timer_seconds);
 }
 
 /*
@@ -216,10 +302,8 @@ static void TIMER_SETTING_select_single_click_handler(ClickRecognizerRef recogni
  */
 static void TIMER_SETTING_up_single_click_handler(ClickRecognizerRef recognizer, void *context) {
     if (timer_minutes < 1000) {
-        timer_minutes += 1;
-        timer_seconds = 0;
-        update_timer();
-        save_time();
+        start_timer_seconds += 60;
+        update_timer(start_timer_seconds);
     } else {
         vibes_short_pulse();
     }
@@ -230,10 +314,8 @@ static void TIMER_SETTING_up_single_click_handler(ClickRecognizerRef recognizer,
  */
 static void TIMER_SETTING_down_single_click_handler(ClickRecognizerRef recognizer, void *context) {
     if (timer_minutes > 0) {
-        timer_minutes -= 1;
-        timer_seconds = 0;
-        update_timer();
-        save_time();
+        start_timer_seconds -= 60;
+        update_timer(start_timer_seconds);
     } else {
         vibes_short_pulse();
     }
@@ -246,12 +328,13 @@ static void TIMER_SETTING_select_long_click_down_handler(ClickRecognizerRef reco
     action_bar_app_change_app(2);
     vibes_short_pulse();
 }
-static void TIMER_SETTING_select_long_click_up_handler(ClickRecognizerRef recognizer, void *context) {
-
-}
 
 
-/* Count down timer running application */
+/* ================================================================================
+ * 
+ * Count down timer running application
+ * 
+ * ================================================================================ */
 
 /*
  * キャンセル
@@ -272,12 +355,13 @@ static void TIMER_RUNNING_select_long_click_down_handler(ClickRecognizerRef reco
     action_bar_app_change_app(2);
     vibes_short_pulse();
 }
-static void TIMER_RUNNING_select_long_click_up_handler(ClickRecognizerRef recognizer, void *context) {
-
-}
 
 
-/* Control keynote application */
+/* ================================================================================
+ * 
+ * Control keynote application
+ * 
+ * ================================================================================ */
 
 /*
  * スライドを1枚戻す
@@ -302,34 +386,30 @@ static void KEYNOTE_select_long_click_down_handler(ClickRecognizerRef recognizer
     action_bar_app_change_app(0);
     vibes_short_pulse();
 }
-static void KEYNOTE_select_long_click_up_handler(ClickRecognizerRef recognizer, void *context) {
-
-}
-
-
 
 
 static void window_load(Window *window) {
+
+    read_data();
+
     Layer *window_layer = window_get_root_layer(window);
     //GRect bounds = layer_get_bounds(window_layer);
 
-    read_time();
-
     // tl_timer_minutes
-    tl_timer_minutes = text_layer_create(GRect(2, 55, 70, 35));
+    tl_timer_minutes = text_layer_create(GRect(2, 55, 65, 35));
     text_layer_set_text(tl_timer_minutes, "999:");
     text_layer_set_font(tl_timer_minutes, s_res_bitham_30_black);
     text_layer_set_text_alignment(tl_timer_minutes, GTextAlignmentRight);
     layer_add_child(window_layer, (Layer *)tl_timer_minutes);
 
     // tl_timer_seconds
-    tl_timer_seconds = text_layer_create(GRect(72, 55, 40, 35));
+    tl_timer_seconds = text_layer_create(GRect(67, 55, 45, 35));
     text_layer_set_text(tl_timer_seconds, "99");
     text_layer_set_font(tl_timer_seconds, s_res_bitham_30_black);
     text_layer_set_text_alignment(tl_timer_seconds, GTextAlignmentRight);
     layer_add_child(window_layer, (Layer *)tl_timer_seconds);
 
-    update_timer();
+    update_timer(start_timer_seconds);
 
     // text_layer
     text_layer = text_layer_create(GRect(20, 110, 100, 30));
@@ -347,6 +427,7 @@ static void window_load(Window *window) {
 }
 
 static void window_unload(Window *window) {
+    save_data();
     text_layer_destroy(text_layer);
     action_bar_layer_destroy(action_bar);
 }
@@ -364,6 +445,12 @@ static void create_resource(){
             RESOURCE_ID_IMAGE_ACTION_ICON_UP);
     action_icon_back_timer = gbitmap_create_with_resource(
             RESOURCE_ID_IMAGE_ACTION_ICON_BACK_TIMER);
+    action_icon_pause = gbitmap_create_with_resource(
+            RESOURCE_ID_IMAGE_ACTION_ICON_PAUSE);
+    action_icon_cancel = gbitmap_create_with_resource(
+            RESOURCE_ID_IMAGE_ACTION_ICON_CANCEL);
+    action_icon_play = gbitmap_create_with_resource(
+            RESOURCE_ID_IMAGE_ACTION_ICON_PLAY);
 }
 
 static void init(void) {
@@ -387,35 +474,49 @@ static void create_app() {
     // TIMER SETTING
     new_ActionBarApp(&apps[0],
             action_icon_up,
-            NULL,
+            action_icon_play,
             action_icon_down,
             &TIMER_SETTING_up_single_click_handler,
             &TIMER_SETTING_select_single_click_handler,
             &TIMER_SETTING_down_single_click_handler,
-            &TIMER_SETTING_select_long_click_up_handler,
-            &TIMER_SETTING_select_long_click_down_handler
+            NULL,
+            NULL,
+            NULL,
+            &TIMER_SETTING_select_long_click_down_handler,
+            NULL,
+            NULL
             );
     // TIMER RUNNING
     new_ActionBarApp(&apps[1],
+            action_icon_cancel,
             NULL,
-            NULL,
-            NULL,
+            action_icon_pause,
             &TIMER_RUNNING_up_single_click_handler,
             NULL,
             &TIMER_RUNNING_down_single_click_handler,
-            &TIMER_RUNNING_select_long_click_up_handler,
-            &TIMER_RUNNING_select_long_click_down_handler
+            NULL,
+            NULL,
+            NULL,
+            &TIMER_RUNNING_select_long_click_down_handler,
+            NULL,
+            NULL
             );
     // Keynote
     new_ActionBarApp(&apps[2],
             action_icon_back,
             action_icon_back_timer,
             action_icon_next,
+
             &KEYNOTE_up_single_click_handler,
             NULL,
             &KEYNOTE_down_single_click_handler,
-            &KEYNOTE_select_long_click_up_handler,
-            &KEYNOTE_select_long_click_down_handler
+
+            NULL,   /* up long up */
+            NULL,   /* up long down */
+            NULL,   /*  select long up  */
+            &KEYNOTE_select_long_click_down_handler, /*  select long down */
+            NULL,   /* down long up */
+            NULL    /* down long down */
             );
 }
 
