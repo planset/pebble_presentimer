@@ -4,7 +4,7 @@ README
 
 これは何？
 ==========
-pebbleでプレゼンをする時に便利なタイマー＆Keynote操作アプリです。
+pebbleでプレゼンをする時に便利なタイマー＆Keynote操作のpebbleアプリです。
 
 
 pebbleの時計のインストール方法
