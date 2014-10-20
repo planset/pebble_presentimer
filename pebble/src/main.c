@@ -5,7 +5,13 @@
 const int LONG_CLICK_DELAY_MS = 500; // A value of 0 means to user the system default 500ms.
 
 static Window *window;
-static TextLayer *text_layer;
+
+static TextLayer *tl_title;
+static TextLayer *tl_state;
+static TextLayer *tl_timer_minutes;
+static TextLayer *tl_timer_seconds;
+static TextLayer *tl_keynote_control;
+
 static ActionBarLayer *action_bar;
 
 static GBitmap *action_icon_back;
@@ -17,11 +23,10 @@ static GBitmap *action_icon_pause;
 static GBitmap *action_icon_cancel;
 static GBitmap *action_icon_play;
 
+static GFont s_res_gothic_24_bold;
 static GFont s_res_bitham_30_black;
 static GFont s_res_roboto_condensed_21;
-
-static TextLayer *tl_timer_minutes;
-static TextLayer *tl_timer_seconds;
+static GFont s_res_gothic_18;
 
 static int timer_minutes = 5;
 static int timer_seconds = 0;
@@ -30,6 +35,17 @@ static bool is_runnning = false;
 static int start_time = -1;
 static int start_timer_minutes = 5;
 static int start_timer_seconds = 0;
+
+typedef enum {
+    PAGE_TIMER_SETTING,
+    PAGE_TIMER_RUNNING,
+    PAGE_KEYNOTE
+} PageType;
+
+typedef enum {
+    STATE_STOP,
+    STATE_RUNNING
+} StateType;
 
 typedef enum {
     KEYNOTE_CONTROL_BACK = 0,
@@ -108,17 +124,27 @@ static void action_bar_app_set_icon(ActionBarApp *app){
 
 static ActionBarApp apps[3];
 static int current_app_index = 0;
+static int prev_app_index = 0;
 static ActionBarApp *current_app;
+
+
+static void set_title(PageType );
+static void set_state(StateType );
+
 
 /*
  * アクションバーの変更
  */
 static void action_bar_app_change_app(int app_index){
 
+    prev_app_index = current_app_index;
     current_app_index = app_index;
     current_app = &apps[app_index];
 
     action_bar_app_set_icon(current_app);
+
+    set_title(app_index);
+
 }
 
 
@@ -133,6 +159,42 @@ static void update_timer(int sec) {
     snprintf(timer_seconds_text, 3, "%d", timer_seconds);
     text_layer_set_text(tl_timer_minutes, timer_minutes_text);
     text_layer_set_text(tl_timer_seconds, timer_seconds_text);
+}
+
+
+/*
+ * タイトルの設定
+ */
+static void set_title(PageType pt) {
+    static char title[] = "12345678901234567890";
+    
+    if (pt == PAGE_TIMER_SETTING) {
+        snprintf(title, 20, "TIMER");
+        set_state(STATE_STOP);
+    } else if (pt == PAGE_TIMER_RUNNING) {
+        snprintf(title, 20, "TIMER");
+        set_state(STATE_RUNNING);
+    } else if (pt == PAGE_KEYNOTE) {
+        snprintf(title, 20, "KEYNOTE");
+    }
+
+    text_layer_set_text(tl_title, title);
+}
+
+/*
+ * 状態の設定
+ */
+static void set_state(StateType st) {
+    static char state[] = "12345678901234567890";
+    
+    if (st == STATE_STOP) {
+        snprintf(state, 20, "STOP");
+    } else if (st == STATE_RUNNING) {
+        snprintf(state, 20, "RUNNING");
+    }
+
+    text_layer_set_text(tl_state, state);
+
 }
 
 
@@ -295,6 +357,8 @@ static void TIMER_SETTING_select_single_click_handler(ClickRecognizerRef recogni
     tick_timer_service_subscribe(SECOND_UNIT, update_timer_tick_handler);
     
     update_timer(start_timer_seconds);
+
+    action_bar_app_change_app(PAGE_TIMER_RUNNING);
 }
 
 /*
@@ -325,7 +389,7 @@ static void TIMER_SETTING_down_single_click_handler(ClickRecognizerRef recognize
  * キーノート操作モードに切り替える
  */
 static void TIMER_SETTING_select_long_click_down_handler(ClickRecognizerRef recognizer, void *context) {
-    action_bar_app_change_app(2);
+    action_bar_app_change_app(PAGE_KEYNOTE);
     vibes_short_pulse();
 }
 
@@ -340,19 +404,24 @@ static void TIMER_SETTING_select_long_click_down_handler(ClickRecognizerRef reco
  * キャンセル
  */
 static void TIMER_RUNNING_up_single_click_handler(ClickRecognizerRef recognizer, void *context) {
+    start_timer_seconds = timer_minutes * 60 + timer_seconds;
+    update_timer(start_timer_seconds);
+    tick_timer_service_unsubscribe();
+    action_bar_app_change_app(PAGE_TIMER_SETTING);
 }
 
 /*
  * 一時停止
  */
 static void TIMER_RUNNING_down_single_click_handler(ClickRecognizerRef recognizer, void *context) {
+    // いらないかも
 }
 
 /*
  * キーノート操作モードに切り替える
  */
 static void TIMER_RUNNING_select_long_click_down_handler(ClickRecognizerRef recognizer, void *context) {
-    action_bar_app_change_app(2);
+    action_bar_app_change_app(PAGE_KEYNOTE);
     vibes_short_pulse();
 }
 
@@ -367,7 +436,7 @@ static void TIMER_RUNNING_select_long_click_down_handler(ClickRecognizerRef reco
  * スライドを1枚戻す
  */
 static void KEYNOTE_up_single_click_handler(ClickRecognizerRef recognizer, void *context) {
-    text_layer_set_text(text_layer, "Back");
+    text_layer_set_text(tl_keynote_control, "Back");
     control_keynote(KEYNOTE_CONTROL_BACK);
 }
 
@@ -375,7 +444,7 @@ static void KEYNOTE_up_single_click_handler(ClickRecognizerRef recognizer, void 
  * スライドを1枚進める
  */
 static void KEYNOTE_down_single_click_handler(ClickRecognizerRef recognizer, void *context) {
-    text_layer_set_text(text_layer, "Next");
+    text_layer_set_text(tl_keynote_control, "Next");
     control_keynote(KEYNOTE_CONTROL_NEXT);
 }
 
@@ -383,7 +452,8 @@ static void KEYNOTE_down_single_click_handler(ClickRecognizerRef recognizer, voi
  * タイマー設定モードまたはタイマーモードに切り替える
  */
 static void KEYNOTE_select_long_click_down_handler(ClickRecognizerRef recognizer, void *context) {
-    action_bar_app_change_app(0);
+    text_layer_set_text(tl_keynote_control, "");
+    action_bar_app_change_app(prev_app_index);
     vibes_short_pulse();
 }
 
@@ -393,7 +463,18 @@ static void window_load(Window *window) {
     read_data();
 
     Layer *window_layer = window_get_root_layer(window);
-    //GRect bounds = layer_get_bounds(window_layer);
+    
+    // tl_title
+    tl_title = text_layer_create(GRect(0, 0, 144, 25));
+    text_layer_set_text(tl_title, "TITLE");
+    text_layer_set_font(tl_title, s_res_gothic_24_bold);
+    layer_add_child(window_get_root_layer(window), (Layer *)tl_title);
+
+    // tl_state
+    tl_state = text_layer_create(GRect(0, 25, 144, 20));
+    text_layer_set_text(tl_state, "STATE");
+    text_layer_set_font(tl_state, s_res_gothic_18);
+    layer_add_child(window_get_root_layer(window), (Layer *)tl_state);
 
     // tl_timer_minutes
     tl_timer_minutes = text_layer_create(GRect(2, 55, 65, 35));
@@ -409,14 +490,12 @@ static void window_load(Window *window) {
     text_layer_set_text_alignment(tl_timer_seconds, GTextAlignmentRight);
     layer_add_child(window_layer, (Layer *)tl_timer_seconds);
 
-    update_timer(start_timer_seconds);
-
     // text_layer
-    text_layer = text_layer_create(GRect(20, 110, 100, 30));
-    text_layer_set_text(text_layer, "");
-    text_layer_set_text_alignment(text_layer, GTextAlignmentCenter);
-    text_layer_set_font(text_layer, s_res_roboto_condensed_21);
-    layer_add_child(window_layer, (Layer *)text_layer);
+    tl_keynote_control = text_layer_create(GRect(20, 110, 100, 30));
+    text_layer_set_text(tl_keynote_control, "");
+    text_layer_set_text_alignment(tl_keynote_control, GTextAlignmentCenter);
+    text_layer_set_font(tl_keynote_control, s_res_roboto_condensed_21);
+    layer_add_child(window_layer, (Layer *)tl_keynote_control);
 
     // action bar
     action_bar = action_bar_layer_create();
@@ -424,17 +503,26 @@ static void window_load(Window *window) {
     action_bar_layer_set_click_config_provider(action_bar, click_config_provider);
 
     action_bar_app_change_app(0);
+
+    update_timer(start_timer_seconds);
+
 }
 
 static void window_unload(Window *window) {
     save_data();
-    text_layer_destroy(text_layer);
+    text_layer_destroy(tl_state);
+    text_layer_destroy(tl_title);
+    text_layer_destroy(tl_keynote_control);
+    text_layer_destroy(tl_timer_minutes);
+    text_layer_destroy(tl_timer_seconds);
     action_bar_layer_destroy(action_bar);
 }
 
 static void create_resource(){
     s_res_bitham_30_black = fonts_get_system_font(FONT_KEY_BITHAM_30_BLACK);
     s_res_roboto_condensed_21 = fonts_get_system_font(FONT_KEY_ROBOTO_CONDENSED_21);
+    s_res_gothic_18 = fonts_get_system_font(FONT_KEY_GOTHIC_18);
+    s_res_gothic_24_bold = fonts_get_system_font(FONT_KEY_GOTHIC_24_BOLD);
     action_icon_back = gbitmap_create_with_resource(
             RESOURCE_ID_IMAGE_ACTION_ICON_BACK);
     action_icon_next = gbitmap_create_with_resource(
@@ -490,7 +578,7 @@ static void create_app() {
     new_ActionBarApp(&apps[1],
             action_icon_cancel,
             NULL,
-            action_icon_pause,
+            NULL, /* action_icon_pause,*/
             &TIMER_RUNNING_up_single_click_handler,
             NULL,
             &TIMER_RUNNING_down_single_click_handler,
