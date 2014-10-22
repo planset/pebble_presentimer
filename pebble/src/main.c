@@ -428,6 +428,7 @@ static void TIMER_SETTING_select_long_click_down_handler(ClickRecognizerRef reco
  * キャンセル
  */
 static void TIMER_RUNNING_up_single_click_handler(ClickRecognizerRef recognizer, void *context) {
+    start_timer_seconds = get_remaining_seconds();
     update_time(start_timer_seconds);
     tick_timer_service_unsubscribe();
     action_bar_app_change_app(PAGE_TIMER_SETTING);
