@@ -377,24 +377,36 @@ static void TIMER_SETTING_select_single_click_handler(ClickRecognizerRef recogni
  * カウントを1分増やす
  */
 static void TIMER_SETTING_up_single_click_handler(ClickRecognizerRef recognizer, void *context) {
-    if (start_timer_seconds < 1000 * 60 - 60) {
-        start_timer_seconds += 60;
-        update_time(start_timer_seconds);
-    } else {
+    if (start_timer_seconds == 1000 * 60){
         vibes_short_pulse();
+        return;
     }
+
+    if (start_timer_seconds < 1000 * 60 - 60) {
+        start_timer_seconds += 60 - start_timer_seconds % 60;
+    } else {
+        start_timer_seconds = 1000 * 60;
+    }
+    
+    update_time(start_timer_seconds);
 }
 
 /*
  * カウントを1分減らす
  */
 static void TIMER_SETTING_down_single_click_handler(ClickRecognizerRef recognizer, void *context) {
-    if (start_timer_seconds > 60) {
-        start_timer_seconds -= 60;
-        update_time(start_timer_seconds);
-    } else {
+    if (start_timer_seconds == 0){
         vibes_short_pulse();
+        return;
     }
+
+    if (start_timer_seconds > 60) {
+        start_timer_seconds -= (start_timer_seconds % 60 ? start_timer_seconds % 60 : 60);
+    } else {
+        start_timer_seconds = 0;
+    }
+    
+    update_time(start_timer_seconds);
 }
 
 /*
