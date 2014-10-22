@@ -395,7 +395,7 @@ static void TIMER_SETTING_up_single_click_handler(ClickRecognizerRef recognizer,
  * カウントを1分減らす
  */
 static void TIMER_SETTING_down_single_click_handler(ClickRecognizerRef recognizer, void *context) {
-    if (start_timer_seconds == 0){
+    if (start_timer_seconds == 60){
         vibes_short_pulse();
         return;
     }
@@ -403,7 +403,7 @@ static void TIMER_SETTING_down_single_click_handler(ClickRecognizerRef recognize
     if (start_timer_seconds > 60) {
         start_timer_seconds -= (start_timer_seconds % 60 ? start_timer_seconds % 60 : 60);
     } else {
-        start_timer_seconds = 0;
+        start_timer_seconds = 60;
     }
     
     update_time(start_timer_seconds);
