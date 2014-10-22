@@ -28,13 +28,22 @@ static GFont s_res_bitham_30_black;
 static GFont s_res_roboto_condensed_21;
 static GFont s_res_gothic_18;
 
-static int timer_minutes = 5;
-static int timer_seconds = 0;
 
+/*
+ * 現在タイマー動作中かどうか
+ */
 static bool is_runnning = false;
-static int start_time = -1;
-static int start_timer_minutes = 5;
+
+/*
+ * タイマーの設定秒数
+ */
 static int start_timer_seconds = 0;
+
+/*
+ * タイマー開始時の時刻
+ */
+static int start_time = -1;
+
 
 typedef enum {
     PAGE_TIMER_SETTING,
@@ -128,8 +137,8 @@ static int prev_app_index = 0;
 static ActionBarApp *current_app;
 
 
-static void set_title(PageType );
-static void set_state(StateType );
+static void set_title(PageType);
+static void set_state(StateType);
 
 
 /*
@@ -148,15 +157,16 @@ static void action_bar_app_change_app(int app_index){
 }
 
 
-static void update_timer(int sec) {
+/*
+ * テキストレイヤーにタイマーの数字を表示
+ */
+static void update_time(int sec) {
     static char timer_minutes_text[5] = "999:";
     static char timer_seconds_text[3] = "99";
 
-    timer_minutes = sec/60;
-    timer_seconds = sec % 60;
+    snprintf(timer_minutes_text, 5, "%d:", sec / 60);
+    snprintf(timer_seconds_text, 3, "%d", sec % 60);
 
-    snprintf(timer_minutes_text, 5, "%d:", timer_minutes);
-    snprintf(timer_seconds_text, 3, "%d", timer_seconds);
     text_layer_set_text(tl_timer_minutes, timer_minutes_text);
     text_layer_set_text(tl_timer_seconds, timer_seconds_text);
 }
@@ -188,8 +198,10 @@ static void set_state(StateType st) {
     static char state[] = "12345678901234567890";
     
     if (st == STATE_STOP) {
+        is_runnning = false;
         snprintf(state, 20, "STOP");
     } else if (st == STATE_RUNNING) {
+        is_runnning = true;
         snprintf(state, 20, "RUNNING");
     }
 
@@ -216,9 +228,6 @@ static void control_keynote(int control) {
 
     app_message_outbox_send();
 }
-
-
-/* */
 
 /*
  * 真ん中ボタンクリック
@@ -327,14 +336,17 @@ static void read_data(){
  * 
  * ================================================================================ */
 
+static int get_remaining_seconds(){
+    return start_timer_seconds - (time(NULL) - start_time);
+}
+
 static void update_timer_tick_handler(struct tm *tick_time, TimeUnits units_changed) {
     
-    int diff = time(NULL) - start_time;
-    int sec = start_timer_seconds - diff;
+    int sec = get_remaining_seconds();
 
     debug("diffsec = %d", sec);
 
-    update_timer(sec);
+    update_time(sec);
 
     if (sec <= 0) {
         tick_timer_service_unsubscribe();
@@ -344,19 +356,19 @@ static void update_timer_tick_handler(struct tm *tick_time, TimeUnits units_chan
 
 }
 
+static void start_timer(){
+    tick_timer_service_subscribe(SECOND_UNIT, update_timer_tick_handler);
+}
 /*
  * カウントダウンを開始する
  */
 static void TIMER_SETTING_select_single_click_handler(ClickRecognizerRef recognizer, void *context) {
     // 現在時刻を取ってストレージに保存、1秒毎に画面更新するようにTimerを開始
     start_time = (int)time(NULL);
-    start_timer_seconds = timer_minutes * 60 + timer_seconds;
 
     debug("start_time = %d", start_time);
 
-    tick_timer_service_subscribe(SECOND_UNIT, update_timer_tick_handler);
-    
-    update_timer(start_timer_seconds);
+    start_timer();
 
     action_bar_app_change_app(PAGE_TIMER_RUNNING);
 }
@@ -365,9 +377,9 @@ static void TIMER_SETTING_select_single_click_handler(ClickRecognizerRef recogni
  * カウントを1分増やす
  */
 static void TIMER_SETTING_up_single_click_handler(ClickRecognizerRef recognizer, void *context) {
-    if (timer_minutes < 1000) {
+    if (start_timer_seconds < 1000 * 60 - 60) {
         start_timer_seconds += 60;
-        update_timer(start_timer_seconds);
+        update_time(start_timer_seconds);
     } else {
         vibes_short_pulse();
     }
@@ -377,9 +389,9 @@ static void TIMER_SETTING_up_single_click_handler(ClickRecognizerRef recognizer,
  * カウントを1分減らす
  */
 static void TIMER_SETTING_down_single_click_handler(ClickRecognizerRef recognizer, void *context) {
-    if (timer_minutes > 0) {
+    if (start_timer_seconds > 60) {
         start_timer_seconds -= 60;
-        update_timer(start_timer_seconds);
+        update_time(start_timer_seconds);
     } else {
         vibes_short_pulse();
     }
@@ -404,8 +416,7 @@ static void TIMER_SETTING_select_long_click_down_handler(ClickRecognizerRef reco
  * キャンセル
  */
 static void TIMER_RUNNING_up_single_click_handler(ClickRecognizerRef recognizer, void *context) {
-    start_timer_seconds = timer_minutes * 60 + timer_seconds;
-    update_timer(start_timer_seconds);
+    update_time(start_timer_seconds);
     tick_timer_service_unsubscribe();
     action_bar_app_change_app(PAGE_TIMER_SETTING);
 }
@@ -502,9 +513,15 @@ static void window_load(Window *window) {
     action_bar_layer_add_to_window(action_bar, window);
     action_bar_layer_set_click_config_provider(action_bar, click_config_provider);
 
-    action_bar_app_change_app(0);
-
-    update_timer(start_timer_seconds);
+    // 
+    if (is_runnning == STATE_RUNNING) {
+        action_bar_app_change_app(PAGE_TIMER_RUNNING);
+        start_timer();
+        update_time(get_remaining_seconds());
+    } else {
+        action_bar_app_change_app(PAGE_TIMER_SETTING);
+        update_time(start_timer_seconds);
+    }
 
 }
 
