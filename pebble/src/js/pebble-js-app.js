@@ -24,7 +24,6 @@ Pebble.addEventListener("appmessage", function(e) {
     var req = new XMLHttpRequest();
     req.open('GET', url);
     req.send();
-
 });
 
 Pebble.addEventListener("showConfiguration", function() {

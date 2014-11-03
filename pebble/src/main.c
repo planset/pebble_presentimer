@@ -32,7 +32,7 @@ static GFont s_res_gothic_18;
 /*
  * 現在タイマー動作中かどうか
  */
-static bool is_runnning = false;
+static bool is_running = false;
 
 /*
  * タイマーの設定秒数
@@ -44,24 +44,64 @@ static int start_timer_seconds = 0;
  */
 static int start_time = -1;
 
+/*
+ * 定期的にバイブ鳴動する間隔(seconds)
+ */
+static int notification_vibe_delay = 60;
 
+/*
+ * 次に定期的にバイブを鳴動する時間
+ */
+static int next_notification_vibe = 0;
+
+
+/*
+ * 画面の番号
+ */
 typedef enum {
-    PAGE_TIMER_SETTING,
-    PAGE_TIMER_RUNNING,
-    PAGE_KEYNOTE
+    PAGE_TIMER_SETTING,         /* タイマー設定画面 */
+    PAGE_TIMER_SETTING_VIBE,    /* バイブ鳴動間隔設定画面 */
+    PAGE_TIMER_RUNNING,         /* タイマーカウントダウン画面 */
+    PAGE_KEYNOTE,               /* キーノート操作画面 */
+    PAGE_COUNT
 } PageType;
 
+/*
+ *       *start*
+ *         ↓
+ *  PAGE_TIMER_SETTING -> [select] -> PAGE_TIMER_RUNNING
+ *          |                              ↓   ↑
+ *          |                           [select long]
+ *          |                              ↓   ↑
+ *          | <--> [select long] <--> PAGE_TIMER_KEYNOTE
+ *          |
+ *          | <--> [down long]   <--> PAGE_TIMER_SETTING_VIBE
+ * 
+ */
+
+
+/*
+ * タイマーカウントダウンの動作状態
+ */
 typedef enum {
-    STATE_STOP,
-    STATE_RUNNING
+    STATE_STOP,     /* 停止中 */
+    STATE_RUNNING,  /* カウントダウン中 */
 } StateType;
 
+/*
+ * キーノートの操作ID
+ */
 typedef enum {
     KEYNOTE_CONTROL_BACK = 0,
     KEYNOTE_CONTROL_NEXT = 1
 } KeynoteControlType;
 
+/*
+ * 画面の定義 
+ */
 typedef struct {
+    PageType page;
+
     GBitmap *icon_up;
     GBitmap *icon_select;
     GBitmap *icon_down;
@@ -78,7 +118,11 @@ typedef struct {
     void (*down_long_click_down_handler)(ClickRecognizerRef , void *);
 } ActionBarApp;
 
+/*
+ * 画面データの生成
+ */
 static void new_ActionBarApp(ActionBarApp *self,
+        PageType page,
         GBitmap *icon_up,
         GBitmap *icon_select,
         GBitmap *icon_down,
@@ -93,6 +137,7 @@ static void new_ActionBarApp(ActionBarApp *self,
         void (*down_long_click_down_handler)(ClickRecognizerRef , void *)
         ) {
 
+    self->page = page;
     self->icon_up = icon_up;
     self->icon_select = icon_select;
     self->icon_down = icon_down;
@@ -131,14 +176,15 @@ static void action_bar_app_set_icon(ActionBarApp *app){
 
 }
 
-static ActionBarApp apps[3];
+static ActionBarApp apps[PAGE_COUNT];
 static int current_app_index = 0;
 static int prev_app_index = 0;
 static ActionBarApp *current_app;
 
 
 static void set_title(PageType);
-static void set_state(StateType);
+static void set_state(PageType);
+static void set_next_notification_vibe();
 
 
 /*
@@ -153,6 +199,7 @@ static void action_bar_app_change_app(int app_index){
     action_bar_app_set_icon(current_app);
 
     set_title(app_index);
+    set_state(app_index);
 
 }
 
@@ -180,10 +227,10 @@ static void set_title(PageType pt) {
     
     if (pt == PAGE_TIMER_SETTING) {
         snprintf(title, 20, "TIMER");
-        set_state(STATE_STOP);
+    } else if (pt == PAGE_TIMER_SETTING_VIBE) {
+        snprintf(title, 20, "SETTING VIBE");
     } else if (pt == PAGE_TIMER_RUNNING) {
         snprintf(title, 20, "TIMER");
-        set_state(STATE_RUNNING);
     } else if (pt == PAGE_KEYNOTE) {
         snprintf(title, 20, "KEYNOTE");
     }
@@ -191,22 +238,29 @@ static void set_title(PageType pt) {
     text_layer_set_text(tl_title, title);
 }
 
+
 /*
  * 状態の設定
  */
-static void set_state(StateType st) {
+static void set_state(PageType pt) {
     static char state[] = "12345678901234567890";
-    
-    if (st == STATE_STOP) {
-        is_runnning = false;
+
+    if (pt == PAGE_TIMER_SETTING)
+    {
+        is_running = false;
         snprintf(state, 20, "STOP");
-    } else if (st == STATE_RUNNING) {
-        is_runnning = true;
+    }
+    else if (pt == PAGE_TIMER_RUNNING)
+    {
+        is_running = true;
         snprintf(state, 20, "RUNNING");
+    }
+    else
+    {
+        /* no change */
     }
 
     text_layer_set_text(tl_state, state);
-
 }
 
 
@@ -306,16 +360,24 @@ static void click_config_provider(void *context){
     window_single_click_subscribe(BUTTON_ID_UP, up_single_click_handler);
     window_single_click_subscribe(BUTTON_ID_DOWN, down_single_click_handler);
 
+    window_long_click_subscribe(BUTTON_ID_UP, LONG_CLICK_DELAY_MS, 
+            up_long_click_down_handler, 
+            up_long_click_up_handler);
+
     window_long_click_subscribe(BUTTON_ID_SELECT, LONG_CLICK_DELAY_MS, 
             select_long_click_down_handler, 
             select_long_click_up_handler);
+
+    window_long_click_subscribe(BUTTON_ID_DOWN, LONG_CLICK_DELAY_MS, 
+            down_long_click_down_handler, 
+            down_long_click_up_handler);
 }
 
 /*
  * データの保存
  */
 static void save_data(){
-    persist_write_bool(0, is_runnning);
+    persist_write_bool(0, is_running);
     persist_write_int(1, start_time);
     persist_write_int(2, start_timer_seconds);
 }
@@ -324,7 +386,7 @@ static void save_data(){
  * データの読み込み
  */
 static void read_data(){
-    is_runnning = persist_read_bool(0);
+    is_running = persist_read_bool(0);
     start_time = persist_read_int(1);
     start_timer_seconds = persist_read_int(2);
 }
@@ -336,10 +398,17 @@ static void read_data(){
  * 
  * ================================================================================ */
 
+/* 
+ * 残り時間を返す
+ */
 static int get_remaining_seconds(){
-    return start_timer_seconds - (time(NULL) - start_time);
+    int sec = start_timer_seconds - (time(NULL) - start_time);
+    return sec < 0 ? 0 : sec;
 }
 
+/*
+ * カウントダウンタイマーの表示を更新する
+ */
 static void update_timer_tick_handler(struct tm *tick_time, TimeUnits units_changed) {
     
     int sec = get_remaining_seconds();
@@ -348,17 +417,33 @@ static void update_timer_tick_handler(struct tm *tick_time, TimeUnits units_chan
 
     update_time(sec);
 
+    if (sec <= next_notification_vibe) {
+        set_next_notification_vibe();
+        vibes_short_pulse();
+    }
+
     if (sec <= 0) {
         tick_timer_service_unsubscribe();
         vibes_short_pulse();
     }
-    
 
 }
 
+/*
+ * 次の定期通知バイブの時間を決める
+ */
+static void set_next_notification_vibe(){
+    next_notification_vibe = get_remaining_seconds() - notification_vibe_delay;
+}
+
+/* 
+ * カウントダウンタイマーを開始する
+ */
 static void start_timer(){
+    set_next_notification_vibe();
     tick_timer_service_subscribe(SECOND_UNIT, update_timer_tick_handler);
-}
+} 
+
 /*
  * カウントダウンを開始する
  */
@@ -415,6 +500,48 @@ static void TIMER_SETTING_down_single_click_handler(ClickRecognizerRef recognize
 static void TIMER_SETTING_select_long_click_down_handler(ClickRecognizerRef recognizer, void *context) {
     action_bar_app_change_app(PAGE_KEYNOTE);
     vibes_short_pulse();
+}
+
+/*
+ * 下ボタン長押し：バイブ鳴動間隔切り替え画面に切り替える
+ */
+static void TIMER_SETTING_down_long_click_down_handler(ClickRecognizerRef recognizer, void *context) {
+    action_bar_app_change_app(PAGE_TIMER_SETTING_VIBE);
+}
+
+
+/* ================================================================================
+ * 
+ * Count down timer vibe setting application
+ * 
+ * ================================================================================ */
+
+
+/*
+ * 上ボタン短押下：バイブ鳴動設定値を増やす
+ */
+static void TIMER_SETTING_VIBE_up_single_click_handler(ClickRecognizerRef recognizer, void *context) {
+
+    notification_vibe_delay += 60;
+    update_time(notification_vibe_delay);
+
+}
+
+/*
+ * 中ボタン短押下：保存して戻る
+ */
+static void TIMER_SETTING_VIBE_select_single_click_handler(ClickRecognizerRef recognizer, void *context) {
+    action_bar_app_change_app(PAGE_TIMER_SETTING);
+}
+
+/*
+ * 下ボタン短押下：バイブ鳴動設定値を減らす
+ */
+static void TIMER_SETTING_VIBE_down_single_click_handler(ClickRecognizerRef recognizer, void *context) {
+
+    notification_vibe_delay -= 60;
+    update_time(notification_vibe_delay);
+
 }
 
 
@@ -527,7 +654,7 @@ static void window_load(Window *window) {
     action_bar_layer_set_click_config_provider(action_bar, click_config_provider);
 
     // 
-    if (is_runnning == STATE_RUNNING) {
+    if (is_running == STATE_RUNNING) {
         action_bar_app_change_app(PAGE_TIMER_RUNNING);
         start_timer();
         update_time(get_remaining_seconds());
@@ -590,7 +717,8 @@ static void deinit(void) {
 
 static void create_app() {
     // TIMER SETTING
-    new_ActionBarApp(&apps[0],
+    new_ActionBarApp(&apps[PAGE_TIMER_SETTING],
+            PAGE_TIMER_SETTING,
             action_icon_up,
             action_icon_play,
             action_icon_down,
@@ -602,10 +730,29 @@ static void create_app() {
             NULL,
             &TIMER_SETTING_select_long_click_down_handler,
             NULL,
+            &TIMER_SETTING_down_long_click_down_handler
+            );
+
+    // TIMER SETTING VIBE
+    new_ActionBarApp(&apps[PAGE_TIMER_SETTING_VIBE],
+            PAGE_TIMER_SETTING_VIBE,
+            action_icon_up,
+            action_icon_back,
+            action_icon_down,
+            &TIMER_SETTING_VIBE_up_single_click_handler,
+            &TIMER_SETTING_VIBE_select_single_click_handler,
+            &TIMER_SETTING_VIBE_down_single_click_handler,
+            NULL,
+            NULL,
+            NULL,
+            NULL,
+            NULL,
             NULL
             );
+
     // TIMER RUNNING
-    new_ActionBarApp(&apps[1],
+    new_ActionBarApp(&apps[PAGE_TIMER_RUNNING],
+            PAGE_TIMER_RUNNING,
             action_icon_cancel,
             NULL,
             NULL, /* action_icon_pause,*/
@@ -619,8 +766,10 @@ static void create_app() {
             NULL,
             NULL
             );
+
     // Keynote
-    new_ActionBarApp(&apps[2],
+    new_ActionBarApp(&apps[PAGE_KEYNOTE],
+            PAGE_KEYNOTE,
             action_icon_back,
             action_icon_back_timer,
             action_icon_next,
