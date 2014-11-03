@@ -22,6 +22,7 @@ static GBitmap *action_icon_back_timer;
 static GBitmap *action_icon_pause;
 static GBitmap *action_icon_cancel;
 static GBitmap *action_icon_play;
+static GBitmap *action_icon_keynote;
 
 static GFont s_res_gothic_24_bold;
 static GFont s_res_bitham_30_black;
@@ -693,6 +694,8 @@ static void create_resource(){
             RESOURCE_ID_IMAGE_ACTION_ICON_CANCEL);
     action_icon_play = gbitmap_create_with_resource(
             RESOURCE_ID_IMAGE_ACTION_ICON_PLAY);
+    action_icon_keynote = gbitmap_create_with_resource(
+            RESOURCE_ID_IMAGE_ACTION_ICON_KEYNOTE);
 }
 
 static void init(void) {
@@ -751,7 +754,7 @@ static void create_app() {
     new_ActionBarApp(&apps[PAGE_TIMER_RUNNING],
             PAGE_TIMER_RUNNING,
             action_icon_cancel,
-            NULL,
+            action_icon_keynote,
             NULL, /* action_icon_pause,*/
             &TIMER_RUNNING_up_single_click_handler,
             NULL,

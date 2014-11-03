@@ -59,6 +59,11 @@
           "type": "png",
           "name": "IMAGE_ACTION_ICON_PLAY",
           "file": "images/play.png"
+        },
+        {
+          "type": "png",
+          "name": "IMAGE_ACTION_ICON_KEYNOTE",
+          "file": "images/keynote.png"
         }
     ]
   }
