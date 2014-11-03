@@ -29,9 +29,6 @@ static GFont s_res_roboto_condensed_21;
 static GFont s_res_gothic_18;
 
 
-/*
- * 現在タイマー動作中かどうか
- */
 static bool is_running = false;
 
 /*
@@ -653,7 +650,7 @@ static void window_load(Window *window) {
     action_bar_layer_add_to_window(action_bar, window);
     action_bar_layer_set_click_config_provider(action_bar, click_config_provider);
 
-    // 
+    // 状態の復元
     if (is_running == STATE_RUNNING) {
         action_bar_app_change_app(PAGE_TIMER_RUNNING);
         start_timer();
