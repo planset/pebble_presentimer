@@ -505,6 +505,7 @@ static void TIMER_SETTING_select_long_click_down_handler(ClickRecognizerRef reco
  */
 static void TIMER_SETTING_down_long_click_down_handler(ClickRecognizerRef recognizer, void *context) {
     action_bar_app_change_app(PAGE_TIMER_SETTING_VIBE);
+    update_time(notification_vibe_delay);
 }
 
 
@@ -514,13 +515,17 @@ static void TIMER_SETTING_down_long_click_down_handler(ClickRecognizerRef recogn
  * 
  * ================================================================================ */
 
-
 /*
  * 上ボタン短押下：バイブ鳴動設定値を増やす
  */
 static void TIMER_SETTING_VIBE_up_single_click_handler(ClickRecognizerRef recognizer, void *context) {
 
-    notification_vibe_delay += 60;
+    if (notification_vibe_delay < 60 * 60 - 60) {
+        notification_vibe_delay += 60 - notification_vibe_delay % 60;
+    } else {
+        notification_vibe_delay = 60 * 60;
+    }
+
     update_time(notification_vibe_delay);
 
 }
@@ -530,6 +535,7 @@ static void TIMER_SETTING_VIBE_up_single_click_handler(ClickRecognizerRef recogn
  */
 static void TIMER_SETTING_VIBE_select_single_click_handler(ClickRecognizerRef recognizer, void *context) {
     action_bar_app_change_app(PAGE_TIMER_SETTING);
+    update_time(start_timer_seconds);
 }
 
 /*
@@ -537,7 +543,11 @@ static void TIMER_SETTING_VIBE_select_single_click_handler(ClickRecognizerRef re
  */
 static void TIMER_SETTING_VIBE_down_single_click_handler(ClickRecognizerRef recognizer, void *context) {
 
-    notification_vibe_delay -= 60;
+    if (notification_vibe_delay > 60 ) {
+        notification_vibe_delay -= 60;
+    } else {
+        notification_vibe_delay = 60;
+    }
     update_time(notification_vibe_delay);
 
 }
