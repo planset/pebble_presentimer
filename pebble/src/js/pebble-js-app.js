@@ -1,11 +1,4 @@
-var ws;
 var configUrl = "http://dkpyn.com/sandbox/pebble/config.html";
-
-Pebble.addEventListener("ready",
-    function(e) {
-        console.log("ready");
-    }
-);
 
 function controlIdToUrl(id) {
     if (id == 1) {
@@ -14,6 +7,12 @@ function controlIdToUrl(id) {
         return "back";
     }
 }
+
+Pebble.addEventListener("ready",
+    function(e) {
+        console.log("ready");
+    }
+);
 
 Pebble.addEventListener("appmessage", function(e) {
     console.log(e.payload.control);
