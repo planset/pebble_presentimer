@@ -23,6 +23,8 @@ static GBitmap *action_icon_pause;
 static GBitmap *action_icon_cancel;
 static GBitmap *action_icon_play;
 static GBitmap *action_icon_keynote;
+static GBitmap *action_icon_setting_timer;
+static GBitmap *action_icon_setting_vibe;
 
 static GFont s_res_gothic_24_bold;
 static GFont s_res_bitham_30_black;
@@ -57,6 +59,7 @@ static int next_notification_vibe = 0;
  * 画面の番号
  */
 typedef enum {
+    PAGE_MAIN,                  /* メイン画面 */
     PAGE_TIMER_SETTING,         /* タイマー設定画面 */
     PAGE_TIMER_SETTING_VIBE,    /* バイブ鳴動間隔設定画面 */
     PAGE_TIMER_RUNNING,         /* タイマーカウントダウン画面 */
@@ -67,13 +70,14 @@ typedef enum {
 /*
  *       *start*
  *         ↓
- *  PAGE_TIMER_SETTING -> [select] -> PAGE_TIMER_RUNNING
+ *      PAGE_MAIN ---> [select] ----> PAGE_TIMER_RUNNING  MAINに戻るときは[up]
  *          |                              ↓   ↑
  *          |                           [select long]
  *          |                              ↓   ↑
- *          | <--> [select long] <--> PAGE_TIMER_KEYNOTE
+ *          | <--- [select long] ---> PAGE_TIMER_KEYNOTE
  *          |
- *          | <--> [down long]   <--> PAGE_TIMER_SETTING_VIBE
+ *          | <-- [up] -----> PAGE_TIMER_SETTING
+ *          | <-- [down] ---> PAGE_TIMER_SETTING_VIBE
  * 
  */
 
@@ -223,8 +227,10 @@ static void update_time(int sec) {
 static void set_title(PageType pt) {
     static char title[] = "12345678901234567890";
     
-    if (pt == PAGE_TIMER_SETTING) {
+    if (pt == PAGE_MAIN) {
         snprintf(title, 20, "TIMER");
+    } else if (pt == PAGE_TIMER_SETTING) {
+        snprintf(title, 20, "SETTING TIME");
     } else if (pt == PAGE_TIMER_SETTING_VIBE) {
         snprintf(title, 20, "SETTING VIBE");
     } else if (pt == PAGE_TIMER_RUNNING) {
@@ -243,7 +249,7 @@ static void set_title(PageType pt) {
 static void set_state(PageType pt) {
     static char state[] = "12345678901234567890";
 
-    if (pt == PAGE_TIMER_SETTING)
+    if (pt == PAGE_MAIN)
     {
         is_running = false;
         snprintf(state, 20, "STOP");
@@ -389,13 +395,6 @@ static void read_data(){
     start_timer_seconds = persist_read_int(2);
 }
 
-
-/* ================================================================================
- * 
- * Count down timer setting application
- * 
- * ================================================================================ */
-
 /* 
  * 残り時間を返す
  */
@@ -442,10 +441,16 @@ static void start_timer(){
     tick_timer_service_subscribe(SECOND_UNIT, update_timer_tick_handler);
 } 
 
+/* ================================================================================
+ * 
+ * MAIN PAGE
+ * 
+ * ================================================================================ */
+
 /*
  * カウントダウンを開始する
  */
-static void TIMER_SETTING_select_single_click_handler(ClickRecognizerRef recognizer, void *context) {
+static void MAIN_select_single_click_handler(ClickRecognizerRef recognizer, void *context) {
     // 現在時刻を取ってストレージに保存、1秒毎に画面更新するようにTimerを開始
     start_time = (int)time(NULL);
 
@@ -454,6 +459,45 @@ static void TIMER_SETTING_select_single_click_handler(ClickRecognizerRef recogni
     start_timer();
 
     action_bar_app_change_app(PAGE_TIMER_RUNNING);
+}
+
+/*
+ * カウントダウンタイマーの設定画面を開く
+ */
+static void MAIN_up_single_click_handler(ClickRecognizerRef recognizer, void *context) {
+    action_bar_app_change_app(PAGE_TIMER_SETTING);
+}
+
+/*
+ * バイブ鳴動間隔設定画面を開く
+ */
+static void MAIN_down_single_click_handler(ClickRecognizerRef recognizer, void *context) {
+    action_bar_app_change_app(PAGE_TIMER_SETTING_VIBE);
+    update_time(notification_vibe_delay);
+}
+
+/*
+ * キーノート操作モードに切り替える
+ */
+static void MAIN_select_long_click_down_handler(ClickRecognizerRef recognizer, void *context) {
+    action_bar_app_change_app(PAGE_KEYNOTE);
+    vibes_short_pulse();
+}
+
+
+
+/* ================================================================================
+ * 
+ * SETTING TIMER
+ * 
+ * ================================================================================ */
+
+/*
+ * PAGE_MAIN に戻る
+ */
+static void TIMER_SETTING_select_single_click_handler(ClickRecognizerRef recognizer, void *context) {
+
+    action_bar_app_change_app(PAGE_MAIN);
 }
 
 /*
@@ -492,26 +536,10 @@ static void TIMER_SETTING_down_single_click_handler(ClickRecognizerRef recognize
     update_time(start_timer_seconds);
 }
 
-/*
- * キーノート操作モードに切り替える
- */
-static void TIMER_SETTING_select_long_click_down_handler(ClickRecognizerRef recognizer, void *context) {
-    action_bar_app_change_app(PAGE_KEYNOTE);
-    vibes_short_pulse();
-}
-
-/*
- * 下ボタン長押し：バイブ鳴動間隔切り替え画面に切り替える
- */
-static void TIMER_SETTING_down_long_click_down_handler(ClickRecognizerRef recognizer, void *context) {
-    action_bar_app_change_app(PAGE_TIMER_SETTING_VIBE);
-    update_time(notification_vibe_delay);
-}
-
 
 /* ================================================================================
  * 
- * Count down timer vibe setting application
+ * SETTING_VIBE
  * 
  * ================================================================================ */
 
@@ -534,7 +562,7 @@ static void TIMER_SETTING_VIBE_up_single_click_handler(ClickRecognizerRef recogn
  * 中ボタン短押下：保存して戻る
  */
 static void TIMER_SETTING_VIBE_select_single_click_handler(ClickRecognizerRef recognizer, void *context) {
-    action_bar_app_change_app(PAGE_TIMER_SETTING);
+    action_bar_app_change_app(PAGE_MAIN);
     update_time(start_timer_seconds);
 }
 
@@ -566,7 +594,7 @@ static void TIMER_RUNNING_up_single_click_handler(ClickRecognizerRef recognizer,
     start_timer_seconds = get_remaining_seconds();
     update_time(start_timer_seconds);
     tick_timer_service_unsubscribe();
-    action_bar_app_change_app(PAGE_TIMER_SETTING);
+    action_bar_app_change_app(PAGE_MAIN);
 }
 
 /*
@@ -667,7 +695,7 @@ static void window_load(Window *window) {
         start_timer();
         update_time(get_remaining_seconds());
     } else {
-        action_bar_app_change_app(PAGE_TIMER_SETTING);
+        action_bar_app_change_app(PAGE_MAIN);
         update_time(start_timer_seconds);
     }
 
@@ -706,6 +734,10 @@ static void create_resource(){
             RESOURCE_ID_IMAGE_ACTION_ICON_PLAY);
     action_icon_keynote = gbitmap_create_with_resource(
             RESOURCE_ID_IMAGE_ACTION_ICON_KEYNOTE);
+    action_icon_setting_timer = gbitmap_create_with_resource(
+            RESOURCE_ID_IMAGE_ACTION_ICON_SETTING_TIMER);
+    action_icon_setting_vibe = gbitmap_create_with_resource(
+            RESOURCE_ID_IMAGE_ACTION_ICON_SETTING_VIBE);
 }
 
 static void init(void) {
@@ -726,11 +758,28 @@ static void deinit(void) {
 }
 
 static void create_app() {
+    // MAIN
+    new_ActionBarApp(&apps[PAGE_MAIN],
+            PAGE_MAIN,
+            action_icon_setting_timer,
+            action_icon_play,
+            action_icon_setting_vibe,
+            &MAIN_up_single_click_handler,
+            &MAIN_select_single_click_handler,
+            &MAIN_down_single_click_handler,
+            NULL,
+            NULL,
+            NULL,
+            &MAIN_select_long_click_down_handler,
+            NULL,
+            NULL
+            );
+
     // TIMER SETTING
     new_ActionBarApp(&apps[PAGE_TIMER_SETTING],
             PAGE_TIMER_SETTING,
             action_icon_up,
-            action_icon_play,
+            action_icon_back_timer,
             action_icon_down,
             &TIMER_SETTING_up_single_click_handler,
             &TIMER_SETTING_select_single_click_handler,
@@ -738,9 +787,9 @@ static void create_app() {
             NULL,
             NULL,
             NULL,
-            &TIMER_SETTING_select_long_click_down_handler,
             NULL,
-            &TIMER_SETTING_down_long_click_down_handler
+            NULL,
+            NULL
             );
 
     // TIMER SETTING VIBE

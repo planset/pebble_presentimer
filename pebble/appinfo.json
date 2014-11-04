@@ -64,6 +64,16 @@
           "type": "png",
           "name": "IMAGE_ACTION_ICON_KEYNOTE",
           "file": "images/keynote.png"
+        },
+        {
+          "type": "png",
+          "name": "IMAGE_ACTION_ICON_SETTING_TIMER",
+          "file": "images/setting_timer.png"
+        },
+        {
+          "type": "png",
+          "name": "IMAGE_ACTION_ICON_SETTING_VIBE",
+          "file": "images/setting_vibe.png"
         }
     ]
   }
